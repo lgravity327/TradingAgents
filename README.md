@@ -162,6 +162,26 @@ For local models, configure Ollama with `llm_provider: "ollama"`. The default en
 
 For any other OpenAI-compatible server (vLLM, LM Studio, llama.cpp, or a custom relay), use `llm_provider: "openai_compatible"` and set the endpoint via `backend_url` (or `TRADINGAGENTS_LLM_BACKEND_URL`), e.g. `http://localhost:8000/v1` for vLLM or `http://localhost:1234/v1` for LM Studio. The model is whatever your server serves. No key is needed for local servers; set `OPENAI_COMPATIBLE_API_KEY` when the endpoint requires one.
 
+### Codex via ChatGPT login (no LLM API key)
+
+`codex_chatgpt` uses the official Codex CLI authentication already present on
+the machine. Run `codex login status` and confirm it says `Logged in using
+ChatGPT`; otherwise run `codex login` and choose ChatGPT.
+
+```python
+config["llm_provider"] = "codex_chatgpt"
+config["quick_think_llm"] = "default"
+config["deep_think_llm"] = "default"
+config["backend_url"] = None
+config["codex_timeout_seconds"] = 300
+```
+
+This consumes the ChatGPT plan's Codex allowance, not OpenAI API credits or
+ordinary ChatGPT message allowance. It never reads browser cookies or Codex
+OAuth files. Each TradingAgents model call starts an isolated `codex exec`
+process, so it is slower and may use substantial Codex allowance during a full
+multi-agent run. There is no automatic fallback to a paid API provider.
+
 Alternatively, copy `.env.example` to `.env` and fill in your keys:
 ```bash
 cp .env.example .env
@@ -204,7 +224,7 @@ An interface will appear showing results as they load, letting you track the age
 
 ### Implementation Details
 
-We built TradingAgents with LangGraph to ensure flexibility and modularity. The framework supports multiple LLM providers: OpenAI, Google, Anthropic, xAI, DeepSeek, Qwen (Alibaba DashScope, international and China endpoints), GLM (Zhipu), MiniMax (global + China), OpenRouter, Ollama for local models, and Azure OpenAI for enterprise.
+We built TradingAgents with LangGraph to ensure flexibility and modularity. The framework supports OpenAI, Google, Anthropic, xAI, DeepSeek, Qwen, GLM, MiniMax, OpenRouter, Azure OpenAI, Amazon Bedrock, Ollama, generic OpenAI-compatible endpoints, and Codex via an existing ChatGPT login.
 
 ### Python Usage
 
@@ -228,7 +248,7 @@ from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 
 config = DEFAULT_CONFIG.copy()
-config["llm_provider"] = "openai"        # e.g. openai, google, anthropic, deepseek, groq, ollama; openai_compatible covers any OpenAI-compatible endpoint (vLLM, LM Studio, llama.cpp, ...)
+config["llm_provider"] = "openai"        # also: google, anthropic, deepseek, codex_chatgpt, ollama, openai_compatible, ...
 config["deep_think_llm"] = "gpt-5.5"     # Model for complex reasoning
 config["quick_think_llm"] = "gpt-5.4-mini" # Model for quick tasks
 config["max_debate_rounds"] = 2

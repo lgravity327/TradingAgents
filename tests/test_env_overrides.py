@@ -89,6 +89,11 @@ def test_reasoning_effort_defaults_to_none(monkeypatch):
     assert dc.DEFAULT_CONFIG["anthropic_effort"] is None
 
 
+def test_codex_timeout_env_override(monkeypatch):
+    dc = _reload_with_env(monkeypatch, TRADINGAGENTS_CODEX_TIMEOUT="45")
+    assert dc.DEFAULT_CONFIG["codex_timeout_seconds"] == 45
+
+
 def test_empty_env_value_is_passthrough(monkeypatch):
     """Empty TRADINGAGENTS_* values must not clobber the built-in default."""
     dc = _reload_with_env(

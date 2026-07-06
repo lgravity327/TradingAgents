@@ -79,6 +79,16 @@ _MINIMAX_MODELS: dict[str, list[ModelOption]] = {
 
 
 MODEL_OPTIONS: ProviderModeOptions = {
+    "codex_chatgpt": {
+        "quick": [
+            ("Codex account default", "default"),
+            ("Custom model ID", "custom"),
+        ],
+        "deep": [
+            ("Codex account default", "default"),
+            ("Custom model ID", "custom"),
+        ],
+    },
     "openai": {
         "quick": [
             ("GPT-5.4 Mini - Fast, strong coding and tool use", "gpt-5.4-mini"),

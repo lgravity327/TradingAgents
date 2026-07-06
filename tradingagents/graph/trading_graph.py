@@ -149,6 +149,9 @@ class TradingAgentsGraph:
             if effort:
                 kwargs["effort"] = effort
 
+        elif provider == "codex_chatgpt":
+            kwargs["timeout"] = float(self.config.get("codex_timeout_seconds", 300))
+
         # Sampling temperature is cross-provider: forward it whenever set.
         # float() here so a value coming from a TRADINGAGENTS_TEMPERATURE env
         # string ("0.2") works the same as a programmatic float.
