@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from typing import Any
 
 from jsonschema import ValidationError, validate
@@ -38,27 +39,25 @@ def _prompt(
 
 
 def _tool_response_schema(tools: tuple[dict[str, Any], ...]) -> dict[str, Any]:
-    variants = []
-    for tool_spec in tools:
-        function = tool_spec["function"]
-        variants.append(
-            {
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string", "minLength": 1},
-                    "name": {"const": function["name"]},
-                    "args": function.get("parameters", {"type": "object"}),
-                },
-                "required": ["id", "name", "args"],
-                "additionalProperties": False,
-            }
-        )
+    names = [tool_spec["function"]["name"] for tool_spec in tools]
     return {
         "type": "object",
         "properties": {
             "mode": {"enum": ["final", "tool_calls"]},
             "content": {"type": "string"},
-            "tool_calls": {"type": "array", "items": {"oneOf": variants}},
+            "tool_calls": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string", "minLength": 1},
+                        "name": {"enum": names},
+                        "arguments": {"type": "string"},
+                    },
+                    "required": ["id", "name", "arguments"],
+                    "additionalProperties": False,
+                },
+            },
         },
         "required": ["mode", "content", "tool_calls"],
         "additionalProperties": False,
@@ -76,14 +75,39 @@ def _validate_output(value: dict[str, Any], schema: dict[str, Any]) -> None:
 
 
 def _strict_json_schema(value: Any) -> Any:
-    if isinstance(value, dict):
-        normalized = {key: _strict_json_schema(item) for key, item in value.items()}
+    root = deepcopy(value)
+
+    def resolve_ref(ref: str) -> Any:
+        if not ref.startswith("#/"):
+            raise ValueError(f"Only local JSON schema references are supported: {ref}")
+        resolved = root
+        for part in ref[2:].split("/"):
+            resolved = resolved[part.replace("~1", "/").replace("~0", "~")]
+        return deepcopy(resolved)
+
+    def normalize(node: Any) -> Any:
+        if isinstance(node, list):
+            return [normalize(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+
+        normalized = {key: normalize(item) for key, item in node.items()}
+        ref = normalized.get("$ref")
+        if isinstance(ref, str) and len(normalized) > 1:
+            normalized = {**resolve_ref(ref), **normalized}
+            normalized.pop("$ref")
+            return normalize(normalized)
+
         if normalized.get("type") == "object":
             normalized["additionalProperties"] = False
+        properties = normalized.get("properties")
+        if isinstance(properties, dict):
+            normalized["required"] = list(properties)
+        if normalized.get("default") is None:
+            normalized.pop("default", None)
         return normalized
-    if isinstance(value, list):
-        return [_strict_json_schema(item) for item in value]
-    return value
+
+    return normalize(root)
 
 
 def _json_schema(schema: dict[str, Any] | type[BaseModel]) -> dict[str, Any]:
@@ -147,15 +171,28 @@ class CodexChatModel(BaseChatModel):
                     usage_metadata=result.usage,
                 )
             else:
-                calls = [
-                    {
-                        "name": call["name"],
-                        "args": call["args"],
-                        "id": call["id"],
-                        "type": "tool_call",
-                    }
-                    for call in result.value["tool_calls"]
-                ]
+                tools_by_name = {
+                    tool["function"]["name"]: tool["function"]
+                    for tool in self.bound_tools
+                }
+                calls = []
+                for call in result.value["tool_calls"]:
+                    try:
+                        args = json.loads(call["arguments"])
+                    except json.JSONDecodeError as exc:
+                        raise ValueError(
+                            "codex_chatgpt returned invalid tool arguments JSON"
+                        ) from exc
+                    function = tools_by_name[call["name"]]
+                    _validate_output(args, _strict_json_schema(function["parameters"]))
+                    calls.append(
+                        {
+                            "name": call["name"],
+                            "args": args,
+                            "id": call["id"],
+                            "type": "tool_call",
+                        }
+                    )
                 if not calls:
                     raise ValueError(
                         "codex_chatgpt returned tool_calls mode without calls"

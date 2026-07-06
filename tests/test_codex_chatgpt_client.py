@@ -5,9 +5,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
 from pydantic import BaseModel
 
+from tradingagents.agents.schemas import ResearchPlan, TraderProposal
 from tradingagents.llm_clients.codex_chatgpt_client import (
     CodexChatGPTClient,
     CodexChatModel,
+    _json_schema,
 )
 from tradingagents.llm_clients.codex_cli_runner import CodexInvocationResult
 
@@ -78,7 +80,11 @@ def test_bind_tools_builds_valid_langchain_tool_call():
             "mode": "tool_calls",
             "content": "",
             "tool_calls": [
-                {"id": "call_1", "name": "quote", "args": {"symbol": "AAPL"}}
+                {
+                    "id": "call_1",
+                    "name": "quote",
+                    "arguments": '{"symbol":"AAPL"}',
+                }
             ],
         },
         usage=None,
@@ -99,6 +105,8 @@ def test_bind_tools_builds_valid_langchain_tool_call():
     ]
     prompt = runner.invoke.call_args.args[0]
     assert '"name": "quote"' in prompt
+    schema = runner.invoke.call_args.args[1]
+    assert "oneOf" not in str(schema)
 
 
 @pytest.mark.unit
@@ -108,7 +116,9 @@ def test_bind_tools_rejects_unknown_tool():
         value={
             "mode": "tool_calls",
             "content": "",
-            "tool_calls": [{"id": "call_1", "name": "delete_all", "args": {}}],
+            "tool_calls": [
+                {"id": "call_1", "name": "delete_all", "arguments": "{}"}
+            ],
         },
         usage=None,
         elapsed_seconds=0.1,
@@ -127,7 +137,11 @@ def test_bind_tools_rejects_invalid_arguments():
             "mode": "tool_calls",
             "content": "",
             "tool_calls": [
-                {"id": "call_1", "name": "quote", "args": {"symbol": 123}}
+                {
+                    "id": "call_1",
+                    "name": "quote",
+                    "arguments": '{"symbol":123}',
+                }
             ],
         },
         usage=None,
@@ -147,7 +161,11 @@ def test_bind_tools_rejects_final_mode_with_tool_calls():
             "mode": "final",
             "content": "done",
             "tool_calls": [
-                {"id": "call_1", "name": "quote", "args": {"symbol": "AAPL"}}
+                {
+                    "id": "call_1",
+                    "name": "quote",
+                    "arguments": '{"symbol":"AAPL"}',
+                }
             ],
         },
         usage=None,
@@ -162,6 +180,32 @@ def test_bind_tools_rejects_final_mode_with_tool_calls():
 class Decision(BaseModel):
     rating: str
     confidence: float
+
+
+@pytest.mark.unit
+def test_business_schema_expands_ref_with_description_for_codex_strict_mode():
+    schema = _json_schema(ResearchPlan)
+
+    recommendation = schema["properties"]["recommendation"]
+    assert "$ref" not in recommendation
+    assert recommendation["enum"] == [
+        "Buy",
+        "Overweight",
+        "Hold",
+        "Underweight",
+        "Sell",
+    ]
+
+
+@pytest.mark.unit
+def test_business_schema_requires_nullable_optional_fields_in_strict_mode():
+    schema = _json_schema(TraderProposal)
+
+    assert schema["required"] == list(schema["properties"])
+    assert {variant.get("type") for variant in schema["properties"]["entry_price"]["anyOf"]} == {
+        "number",
+        "null",
+    }
 
 
 @pytest.mark.unit
