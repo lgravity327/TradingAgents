@@ -18,6 +18,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
+    "TRADINGAGENTS_CODEX_TIMEOUT":        "codex_timeout_seconds",
     # Provider-specific reasoning/thinking knobs (None = each provider's own
     # default). Settable here for non-interactive runs; the CLI also offers an
     # interactive choice, which is skipped when the matching var is set.
@@ -86,6 +87,8 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # provider-specific URL here would leak (e.g. OpenAI's /v1 was previously
     # being forwarded to Gemini, producing malformed request URLs).
     "backend_url": None,
+    # Per-invocation timeout for the subprocess-backed Codex provider.
+    "codex_timeout_seconds": 300,
     # Provider-specific thinking configuration
     "google_thinking_level": None,      # "high", "minimal", etc.
     "openai_reasoning_effort": None,    # "medium", "high", "low"

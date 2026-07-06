@@ -24,6 +24,10 @@ class TestProviderDefaultUrl(unittest.TestCase):
         from cli.utils import provider_default_url
         self.assertIsNone(provider_default_url("not-a-provider"))
 
+    def test_codex_chatgpt_has_no_backend_url(self):
+        from cli.utils import provider_default_url
+        self.assertIsNone(provider_default_url("codex_chatgpt"))
+
     def test_ollama_honors_base_url_env(self):
         from cli.utils import provider_default_url
         with mock.patch.dict(os.environ, {"OLLAMA_BASE_URL": "http://host:1234/v1"}):
