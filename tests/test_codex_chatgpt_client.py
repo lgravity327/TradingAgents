@@ -179,6 +179,7 @@ def test_with_structured_output_returns_pydantic_model():
     assert result == Decision(rating="Hold", confidence=0.7)
     schema = runner.invoke.call_args.args[1]
     assert schema["properties"]["rating"]["type"] == "string"
+    assert schema["additionalProperties"] is False
 
 
 @pytest.mark.unit

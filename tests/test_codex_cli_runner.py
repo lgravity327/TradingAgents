@@ -49,6 +49,29 @@ def test_readiness_requires_exec_flags():
         runner.ensure_ready()
 
 
+@pytest.mark.unit
+def test_readiness_accepts_chatgpt_status_written_to_stderr():
+    runner = CodexCliRunner(executable="/opt/codex")
+    help_text = " ".join(
+        [
+            "--ephemeral",
+            "--ignore-user-config",
+            "--ignore-rules",
+            "--sandbox",
+            "--skip-git-repo-check",
+            "--output-schema",
+            "--output-last-message",
+            "--json",
+        ]
+    )
+    responses = [
+        completed(0, "", "warning\nLogged in using ChatGPT\n"),
+        completed(0, help_text),
+    ]
+    with mock.patch("subprocess.run", side_effect=responses):
+        runner.ensure_ready()
+
+
 def test_error_hierarchy_is_specific():
     assert issubclass(CodexLoginError, CodexCapabilityError)
     assert issubclass(CodexTimeoutError, CodexInvocationError)
@@ -196,5 +219,27 @@ def test_invoke_rejects_non_object_output():
     runner = CodexCliRunner(executable="/opt/codex")
     with mock.patch("subprocess.Popen", side_effect=factory), pytest.raises(
         CodexInvocationError, match="JSON object"
+    ):
+        runner.invoke("PROMPT", {"type": "object"})
+
+
+@pytest.mark.unit
+def test_invoke_surfaces_jsonl_error_when_stderr_is_empty():
+    def factory(argv, **kwargs):
+        return FakeProcess(
+            argv,
+            json.dumps(
+                {
+                    "type": "error",
+                    "message": "invalid_json_schema: additionalProperties is required",
+                }
+            ),
+            {"content": ""},
+            returncode=1,
+        )
+
+    runner = CodexCliRunner(executable="/opt/codex")
+    with mock.patch("subprocess.Popen", side_effect=factory), pytest.raises(
+        CodexInvocationError, match="additionalProperties"
     ):
         runner.invoke("PROMPT", {"type": "object"})

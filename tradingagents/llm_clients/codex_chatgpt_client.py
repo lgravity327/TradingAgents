@@ -75,14 +75,25 @@ def _validate_output(value: dict[str, Any], schema: dict[str, Any]) -> None:
         ) from exc
 
 
+def _strict_json_schema(value: Any) -> Any:
+    if isinstance(value, dict):
+        normalized = {key: _strict_json_schema(item) for key, item in value.items()}
+        if normalized.get("type") == "object":
+            normalized["additionalProperties"] = False
+        return normalized
+    if isinstance(value, list):
+        return [_strict_json_schema(item) for item in value]
+    return value
+
+
 def _json_schema(schema: dict[str, Any] | type[BaseModel]) -> dict[str, Any]:
     if isinstance(schema, dict):
         if schema.get("type") == "function":
-            return schema["function"]["parameters"]
-        return schema
-    if isinstance(schema, type) and issubclass(schema, BaseModel):
-        return schema.model_json_schema()
-    raise TypeError("structured schema must be a Pydantic model or JSON schema dict")
+            schema = schema["function"]["parameters"]
+        return _strict_json_schema(schema)
+    if not (isinstance(schema, type) and issubclass(schema, BaseModel)):
+        raise TypeError("structured schema must be a Pydantic model or JSON schema dict")
+    return _strict_json_schema(schema.model_json_schema())
 
 
 class CodexChatModel(BaseChatModel):
@@ -119,6 +130,7 @@ class CodexChatModel(BaseChatModel):
         else:
             schema = PLAIN_SCHEMA
             prompt = _prompt(messages)
+        schema = _strict_json_schema(schema)
         result = self.runner.invoke(prompt, schema, self.model_name)
         _validate_output(result.value, schema)
         if self.structured_schema is not None:

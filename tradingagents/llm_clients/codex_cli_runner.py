@@ -92,6 +92,20 @@ def _parse_events(stdout: str) -> list[dict[str, Any]]:
     return [json.loads(line) for line in stdout.splitlines() if line.strip()]
 
 
+def _error_from_events(stdout: str) -> str:
+    for line in reversed(stdout.splitlines()):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "error":
+            return str(event.get("message") or "")
+        if event.get("type") == "turn.failed":
+            error = event.get("error") or {}
+            return str(error.get("message") or error)
+    return ""
+
+
 def _usage_from_events(events: list[dict[str, Any]]) -> dict[str, int] | None:
     for event in reversed(events):
         usage = event.get("usage")
@@ -134,7 +148,8 @@ class CodexCliRunner:
             check=False,
             env=_codex_env(),
         )
-        if login.returncode != 0 or "Logged in using ChatGPT" not in login.stdout:
+        login_status = f"{login.stdout}\n{login.stderr}"
+        if login.returncode != 0 or "Logged in using ChatGPT" not in login_status:
             raise CodexLoginError(
                 "Codex CLI 必须使用 ChatGPT 登录；请运行 codex login 并选择 ChatGPT"
             )
@@ -209,7 +224,7 @@ class CodexCliRunner:
                 ) from exc
 
             if process.returncode != 0:
-                detail = _safe_stderr(stderr)
+                detail = _safe_stderr(stderr) or _safe_stderr(_error_from_events(stdout))
                 lowered = detail.lower()
                 if any(term in lowered for term in ("rate limit", "usage limit", "credit")):
                     detail = f"Codex usage limit reached: {detail}"
